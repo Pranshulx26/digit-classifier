@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digit Recognition App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+        .container {
+            padding: 20px;
+        }
+        .btn {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+        #canvas {
+            border: 1px solid black;
+            background-color: #fff;
+            margin-top: 20px;
+            cursor: crosshair;
+        }
+        .image-preview {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: center;
+        }
+        .image-preview img {
+            max-width: 500px; /* Updated to display larger images */
+            display: none;
+        }
+        .prediction-result {
+            margin-top: 20px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Welcome to the Digit Recognition App</h1>
+    </header>
+
+    <div class="container">
+        <h2>Upload a Handwritten Digit Image or Draw it Below:</h2>
+
+        <!-- Image Upload Form -->
+        <input type="file" id="imageUpload" accept="image/*">
+        <button class="btn" onclick="uploadImage()">Upload Image</button>
+
+        <!-- Image Preview -->
+        <div class="image-preview" id="imagePreview">
+            <h3>Image Preview:</h3>
+            <img id="previewImg" src="#" alt="Image Preview">
+        </div>
+
+        <!-- Canvas Drawing Section -->
+        <h3>Or Draw a Digit Below:</h3>
+        <canvas id="canvas" width="280" height="280"></canvas>
+        <br>
+        <button class="btn" onclick="clearCanvas()">Clear</button>
+        <button class="btn" onclick="predictDrawing()">Predict Drawing</button>
+
+        <!-- Prediction Results -->
+        <div class="prediction-result">
+            <p>Prediction: <span id="predictedDigit">-</span></p>
+            <p>Saved As: <span id="savedFileName">-</span></p>
+        </div>
+    </div>
+
+    <script>
+        // Handle image file input and preview
+        document.getElementById("imageUpload").addEventListener("change", function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const previewImg = document.getElementById("previewImg");
+                    previewImg.style.display = "block";
+                    previewImg.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Display Prediction Results
+        function displayPrediction(data) {
+            document.getElementById("predictedDigit").textContent = data.prediction || "Error";
+            document.getElementById("savedFileName").textContent = data.saved_as || "Not Saved";
+        }
+
+        // Upload an Image for Prediction
+        function uploadImage() {
+            const imageFile = document.getElementById("imageUpload").files[0];
+            if (!imageFile) {
+                alert("Please upload an image.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("image", imageFile);
+
+            fetch("/predict", {
+                method: "POST",
+                body: formData
+            })
+            .then(response => response.json())
+            .then(displayPrediction)
+            .catch(error => {
+                console.error("Error:", error);
+                document.getElementById("predictedDigit").textContent = "Error";
+            });
+        }
+
+        // Canvas Drawing
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        let drawing = false;
+
+        // Set white background for canvas
+        canvas.addEventListener("mousedown", () => {
+            drawing = true;
+            // Fill the canvas with a white background
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height); // Fill the entire canvas with white
+        });
+
+        // Start drawing
+        canvas.addEventListener("mousemove", e => {
+            if (!drawing) return;
+            ctx.lineWidth = 15;
+            ctx.lineCap = "round";
+            ctx.strokeStyle = "#000000"; // Black color for the digit
+
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(e.offsetX, e.offsetY);
+        });
+
+        // End drawing
+        canvas.addEventListener("mouseup", () => {
+            drawing = false;
+            ctx.beginPath();
+        });
+
+        // Clear the Canvas
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Predict Drawing
+        function predictDrawing() {
+            // Get the canvas data as an image
+            const dataUrl = canvas.toDataURL('image/png'); // Export the canvas as a PNG
+
+            // Create a new image object
+            const img = new Image();
+            img.src = dataUrl;
+            img.onload = function() {
+                // Create a temporary canvas to resize and center the image
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                // Set the size of the new canvas to 280x280 (larger size for saving)
+                tempCanvas.width = 280;
+                tempCanvas.height = 280;
+
+                // Draw the image onto the temporary canvas, resizing it to 280x280
+                tempCtx.drawImage(img, 0, 0, 280, 280);
+
+                // Get the image data as base64 after resizing
+                const resizedDataUrl = tempCanvas.toDataURL('image/png');
+
+                // Send the resized image data to the server for prediction
+                fetch('/predict', {
+                    method: 'POST',
+                    body: JSON.stringify({ image: resizedDataUrl }),
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(displayPrediction)
+                .catch(error => {
+                    console.error("Error during prediction:", error);
+                    document.getElementById("predictedDigit").textContent = "Error";
+                });
+            };
+        }
+    </script>
+</body>
+</html>

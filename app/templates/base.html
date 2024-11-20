@@ -1,0 +1,361 @@
+// Predict Drawing
+function predictDrawing() {
+    // Get the canvas data as an image
+    const dataUrl = canvas.toDataURL('image/png'); // Export the canvas as a PNG
+    fetch('/predict', {
+        method: 'POST',
+        body: JSON.stringify({ image: dataUrl }),
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(displayPrediction)
+    .catch(error => {
+        console.error("Error during prediction:", error);
+        document.getElementById("predictedDigit").textContent = "Error";
+    });
+}
+
+
+
+
+
+
+
+
+
+from flask import Blueprint, render_template, request, jsonify
+import os
+import numpy as np
+from PIL import Image, ImageOps
+import io
+import base64
+import joblib
+import datetime
+
+# Blueprint for views
+views = Blueprint('views', __name__)
+
+# Load the trained model
+MODEL_PATH = r'C:\Users\91965\digit-classifier\notebooks\best_random_forest_model.pkl'
+model = joblib.load(MODEL_PATH)
+
+# Ensure correct path for saving images in the app's static folder
+SAVE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "images")
+os.makedirs(SAVE_PATH, exist_ok=True)
+
+@views.route('/')
+def index():
+    """Render the index page."""
+    return render_template("index.html")
+
+@views.route('/predict', methods=['POST'])
+def predict_digit():
+    """Handle image uploads and return digit predictions."""
+    try:
+        if 'image' in request.files:
+            # Handle uploaded image
+            image_file = request.files['image']
+            image = Image.open(image_file)
+
+            # Save the uploaded image
+            file_name = save_image(image, "uploaded")
+
+            # Process and predict the digit for uploaded images
+            prediction = process_uploaded_image(image)
+            return jsonify({"prediction": prediction, "saved_as": file_name}), 200
+
+        elif request.json.get('image'):
+            # Handle canvas image (Base64 data)
+            image_data = request.json['image']
+            image = decode_base64_image(image_data)
+            if image:
+                # Save the canvas image
+                file_name = save_image(image, "canvas")
+
+                # Process and predict the digit for canvas images
+                prediction = process_canvas_image(image)
+                return jsonify({"prediction": prediction, "saved_as": file_name}), 200
+            else:
+                return jsonify({"error": "Invalid image data"}), 400
+
+        return jsonify({"error": "No image provided"}), 400
+
+    except Exception as e:
+        print(f"Error in predict_digit: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+def decode_base64_image(base64_data):
+    """Decode a base64 image string and return it as a PIL Image."""
+    try:
+        # Remove the base64 prefix and decode
+        image_data = base64.b64decode(base64_data.split(',')[1])
+        image = Image.open(io.BytesIO(image_data))
+        return image
+    except Exception as e:
+        print(f"Error decoding image: {e}")
+        return None
+
+def save_image(image, prefix):
+    """Save the image to the static/images directory."""
+    try:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"{prefix}_{timestamp}.png"
+        file_path = os.path.join(SAVE_PATH, file_name)
+        image.save(file_path)
+        return file_name
+    except Exception as e:
+        print(f"Error saving image: {e}")
+        return "Error: Could not save image"
+
+def preprocess_image(image, invert=True):
+    """
+    Common preprocessing steps:
+    - Convert to grayscale
+    - Resize to 28x28
+    - Optionally invert colors
+    - Normalize pixel values to [0, 1]
+    - Flatten for model input
+    """
+    try:
+        # Step 1: Convert to grayscale
+        image = image.convert('L')
+
+        # Step 2: Optionally invert the image
+        if invert and np.mean(np.array(image)) > 128:  # Likely white background
+            image = ImageOps.invert(image)
+
+        # Step 3: Resize to 28x28 pixels
+        image = image.resize((28, 28), Image.Resampling.LANCZOS)
+
+        # Step 4: Normalize pixel values to [0, 1]
+        image_array = np.array(image) / 255.0
+
+        # Step 5: Flatten the image for model input
+        image_array = image_array.reshape(1, -1)
+        return image_array
+
+    except Exception as e:
+        print(f"Error in preprocessing: {e}")
+        return None
+
+def process_uploaded_image(image):
+    """Preprocess and predict digits for uploaded images."""
+    try:
+        # Uploaded images usually have a proper white background and black digits
+        processed_image = preprocess_image(image, invert=False)
+        if processed_image is None:
+            raise ValueError("Image preprocessing failed.")
+        # Predict the digit
+        prediction = model.predict(processed_image)
+        return str(prediction[0])
+    except Exception as e:
+        print(f"Error during uploaded image prediction: {e}")
+        return "Error: Prediction failed"
+
+def process_canvas_image(image):
+    """Preprocess and predict digits for canvas-drawn images."""
+    try:
+        # Canvas images often require inversion (black background, white digit)
+        processed_image = preprocess_image(image, invert=True)
+        if processed_image is None:
+            raise ValueError("Image preprocessing failed.")
+        # Predict the digit
+        prediction = model.predict(processed_image)
+        return str(prediction[0])
+    except Exception as e:
+        print(f"Error during canvas image prediction: {e}")
+        return "Error: Prediction failed"
+
+
+    
+    
+    
+
+
+
+
+
+
+        <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digit Recognition App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+        .container {
+            padding: 20px;
+        }
+        .btn {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+        #canvas {
+            border: 1px solid black;
+            background-color: #fff;
+            margin-top: 20px;
+            cursor: crosshair;
+        }
+        .image-preview {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: center;
+        }
+        .image-preview img {
+            max-width: 200px;
+            display: none;
+        }
+        .prediction-result {
+            margin-top: 20px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Welcome to the Digit Recognition App</h1>
+    </header>
+
+    <div class="container">
+        <h2>Upload a Handwritten Digit Image or Draw it Below:</h2>
+
+        <!-- Image Upload Form -->
+        <input type="file" id="imageUpload" accept="image/*">
+        <button class="btn" onclick="uploadImage()">Upload Image</button>
+
+        <!-- Image Preview -->
+        <div class="image-preview" id="imagePreview">
+            <h3>Image Preview:</h3>
+            <img id="previewImg" src="#" alt="Image Preview">
+        </div>
+
+        <!-- Canvas Drawing Section -->
+        <h3>Or Draw a Digit Below:</h3>
+        <canvas id="canvas" width="280" height="280"></canvas>
+        <br>
+        <button class="btn" onclick="clearCanvas()">Clear</button>
+        <button class="btn" onclick="predictDrawing()">Predict Drawing</button>
+
+        <!-- Prediction Results -->
+        <div class="prediction-result">
+            <p>Prediction: <span id="predictedDigit">-</span></p>
+            <p>Saved As: <span id="savedFileName">-</span></p>
+        </div>
+    </div>
+
+    <script>
+        // Handle image file input and preview
+        document.getElementById("imageUpload").addEventListener("change", function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const previewImg = document.getElementById("previewImg");
+                    previewImg.style.display = "block";
+                    previewImg.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Display Prediction Results
+        function displayPrediction(data) {
+            document.getElementById("predictedDigit").textContent = data.prediction || "Error";
+            document.getElementById("savedFileName").textContent = data.saved_as || "Not Saved";
+        }
+
+        // Upload an Image for Prediction
+        function uploadImage() {
+            const imageFile = document.getElementById("imageUpload").files[0];
+            if (!imageFile) {
+                alert("Please upload an image.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("image", imageFile);
+
+            fetch("/predict", {
+                method: "POST",
+                body: formData
+            })
+            .then(response => response.json())
+            .then(displayPrediction)
+            .catch(error => {
+                console.error("Error:", error);
+                document.getElementById("predictedDigit").textContent = "Error";
+            });
+        }
+
+        // Canvas Drawing
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        let drawing = false;
+
+        canvas.addEventListener("mousedown", () => drawing = true);
+        canvas.addEventListener("mouseup", () => {
+            drawing = false;
+            ctx.beginPath();
+        });
+        canvas.addEventListener("mousemove", e => {
+            if (!drawing) return;
+            ctx.lineWidth = 15;
+            ctx.lineCap = "round";
+            ctx.strokeStyle = "#000000";
+
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(e.offsetX, e.offsetY);
+        });
+
+        // Clear the Canvas
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Predict Drawing
+    function predictDrawing() {
+    // Get the canvas data as an image
+    const dataUrl = canvas.toDataURL('image/png'); // Export the canvas as a PNG
+    fetch('/predict', {
+        method: 'POST',
+        body: JSON.stringify({ image: dataUrl }),
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(displayPrediction)
+    .catch(error => {
+        console.error("Error during prediction:", error);
+        document.getElementById("predictedDigit").textContent = "Error";
+    });
+}
+
+    </script>
+</body>
+</html>

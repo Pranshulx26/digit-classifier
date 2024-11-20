@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.db
+.DS_Store
+"notebooks/best_random_forest_model.pkl" 
+"notebooks/best_random_forest_model.pkl" 
+notebooks/best_random_forest_model.pkl
+
+# Ignore large files
+notebooks/best_random_forest_model.pkl
+venv/
