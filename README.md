@@ -2,6 +2,12 @@
 
 This project is a simple web application built using **Flask**, where users can upload or draw an image of a digit, and the application predicts the digit using a  **Random Forest** model. The model is saved using **joblib** and the image is processed using **PIL (Pillow)**. The web app allows the user to upload an image or draw digits on a canvas, and it will predict the digit and display the result. It also saves the image file with a timestamp for reference.
 
+# Application Demo
+
+This is a demo of how the application works:
+
+![Application Demo](demo_img/app_demo.png)
+
 ### **Project Overview**
 
 - **Backend**: The backend is powered by **Flask**, a lightweight Python web framework. It handles image uploads, processes them, and returns predictions.
